@@ -1,4 +1,3 @@
-# app.py
 import os
 import sqlite3
 import bcrypt
@@ -6,9 +5,20 @@ from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from dotenv import load_dotenv
+
+from flask_jwt_extended import (
+    JWTManager, jwt_required, create_access_token,
+    get_jwt_identity
+)
+
 from models import db, Person, create_db_tables, User
 
+load_dotenv()
+
 app = Flask(__name__)
+app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY')
+jwt = JWTManager(app)
 
 # Database Connection
 basedir = os.path.abspath(os.path.dirname(__file__))
@@ -33,9 +43,10 @@ def home(username, password):
         user = User.query.filter_by(username=username).first()
         if user:
             if bcrypt.checkpw(password.encode('utf-8'), user.password):
-                return("Logged in!")
+                access_token = create_access_token(identity=username)
+                return jsonify(access_token=access_token), 200
             else:
-                return("Login Failed")
+                return jsonify(error='Invalid credentials'), 401
         else:
             return "Login Failed"
     elif request.method == 'POST':
@@ -50,6 +61,7 @@ def home(username, password):
         return "User registered & Logged In"
 
 @app.route('/entries', methods=['GET']) #Notebook Page (Protected Page)
+@jwt_required()
 def entries():
     # Retrieve all people from the Person model
     people = session.query(Person).all()
@@ -63,6 +75,7 @@ def entries():
     return jsonify(result)
 
 @app.route('/entries/<string:first_name>/<string:last_name>', methods=['GET', 'POST', 'DELETE'])
+@jwt_required()
 def entry(first_name, last_name):
     if request.method == 'GET':
         # Retrieve people by first name and last name
